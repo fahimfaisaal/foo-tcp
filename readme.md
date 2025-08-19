@@ -1,159 +1,156 @@
 # TCP Network I/O Internals
 
-A Docker-based TCP client-server application for exploring network I/O internals, syscalls, and packet-level analysis. This project demonstrates TCP connection handling, message exchange patterns, and provides tools for deep network analysis.
+A Docker-based TCP lab for exploring network I/O internals, syscalls, and packet-level analysis. It includes two echo servers (Node.js and Go) and a configurable TCP client with built-in analysis tools.
 
-## Overview
+## Repository structure
 
-This project consists of:
+```text
+.
+├─ compose.yml              # Docker Compose with 3 services
+├─ client/                  # TCP client + tcpdump/strace tools
+│  ├─ index.js
+│  ├─ Dockerfile
+│  └─ logs/                 # mounted to /app/logs in container
+├─ node-server/             # Node.js TCP server (strace-enabled)
+│  ├─ index.js
+│  ├─ Dockerfile
+│  └─ logs/                 # mounted to /app/logs in container
+└─ go-server/               # Go TCP server (strace-enabled)
+   ├─ main.go
+   ├─ Dockerfile
+   └─ logs/                 # mounted to /app/logs in container
+```
 
-- **TCP Server**: Node.js server that accepts connections and echoes messages back
-- **TCP Client**: Configurable client that can create multiple connections and send test messages
-- **Network Monitoring**: Built-in tools for packet capture and syscall tracing
-- **Dockerized Environment**: Isolated containers for consistent network analysis
+## Services and ports
 
-## Environment Variables
+- **node-server (Node.js)**: listens on container port 3000; published on host as `${NODE_PORT:-3000}`.
+- **go-server (Go)**: listens on container port 3000; published on host as `${GO_PORT:-3001}`.
+- **client**: utility container with `node`, `strace`, `tcpdump`, `telnet`. Default command is idle; you exec into it to run the client.
 
-- `CONNECTIONS`: Number of concurrent client connections (default: 1)
-- `HOST`: Server hostname for client connections (default: localhost)
-- `PORT`: TCP port number (default: 3000)
+Syscall traces for both servers are written inside the containers to `/app/logs/syscall.log` and are bind-mounted to the host at `node-server/logs/syscall.log` and `go-server/logs/syscall.log`.
 
-## Quick Start
+## Prerequisites
 
-### 1. Start the Environment
+- Docker and Docker Compose v2
+
+## Environment variables
+
+- **Client**
+
+  - `CONNECTIONS` (default: 1): number of concurrent connections
+  - `HOST` (default: `localhost`; compose sets it to `node-server`): server hostname/IP
+  - `PORT` (default: 3000): server port
+  - `INTERVAL` (default: 500 ms): message send interval
+  - `TIMEOUT` (default: 10000 ms): how long to keep each connection open
+  - CLI args to `index.js` are treated as candidate messages (picked at random each tick)
+
+- **Node server**
+
+  - `PORT` (default: 3000)
+  - `BLOCK_EVENT_LOOP_INTERVAL` (optional, ms): simulate CPU-bound event-loop blocking in a recurring loop
+
+- **Go server**
+  - Listens on container port 3000 (no env toggles in code); host port is `${GO_PORT:-3001}` via compose
+
+## Quick start
+
+Start everything
 
 ```bash
 docker compose up -d
 ```
 
-### 2. Run Basic Client Test
+Run the client against the Node server
 
 ```bash
-# Enter the client container
+# Enter client container
 docker compose exec client sh
 
-# Inside the container, run client with default single connection
+# Defaults: HOST=node-server (from compose), PORT=3000, 1 connection
 node index.js
 
-# Run client with multiple connections
-CONNECTIONS=5 node index.js
+# Multiple connections with faster messages and shorter lifetime
+CONNECTIONS=5 INTERVAL=200 TIMEOUT=5000 node index.js hello ping foo exit
+
+# or use telnet
+telnet node-server 3000
+# for go server
+telnet go-server 3000
 ```
 
-## Network Analysis
+## Commands and behavior
 
-### TCP Packet Capture
+- Common echo behavior: send words separated by spaces/newlines, server responds per word
+- Node server supported commands: `hi`, `hello`, `ping`, `foo`, `exit`, `poison`, `help`
+  - `poison` closes the Node server listener (stops accepting new connections)
+- Go server supported commands: `hi`, `hello`, `ping`, `foo`, `exit`, `help` (no `poison`)
 
-Capture and analyze TCP handshakes, data transfer, and connection teardown:
+## Network analysis
+
+### TCP packet capture (pcap)
 
 ```bash
-# Enter the client container
+# In one terminal
 docker compose exec client sh
 
-# Inside the container, get the server IP and start packet capture
-SERVER_IP=$(getent hosts server | awk '{print $1}')
-tcpdump -i eth0 host $SERVER_IP and port 3000 -n > tcpdump.log
+tcpdump -i eth0 host node-server -w ./logs/captured.pcap and port 3000 -n
 
-# In another terminal, enter the container again and run client
+# parse the output pcap to log
+tcpdump -r ./logs/captured.pcap > ./logs/tcpdump.log
+
+# or
+
+tcpdump -i eth0 host node-server and port 3000 -n > ./logs/tcpdump.log
+```
+
+Observe:
+
+- 3-way handshake (SYN, SYN-ACK, ACK)
+- Data packets (PSH) and ACKs
+- FIN/ACK teardown
+
+### Syscall tracing
+
+Servers run under `strace` by default.
+
+```bash
+# Node server
+docker compose exec node-server sh -c 'tail -n +1 -f ./logs/syscall.log'
+
+# Go server
+docker compose exec go-server sh -c 'tail -n +1 -f ./logs/syscall.log'
+
+# From the host you can also read the bind-mounted files directly
+tail -f node-server/logs/syscall.log
+tail -f go-server/logs/syscall.log
+```
+
+Client-side ad-hoc syscall tracing:
+
+```bash
 docker compose exec client sh
-node index.js
+strace -e trace=open,read,write,close,socket,connect,listen,accept4,epoll_create1,epoll_ctl,epoll_pwait \
+  -f -tt -T -o ./logs/syscall.log -- node index.js ping hello
 ```
 
-**What to observe:**
-
-- TCP 3-way handshake (SYN, SYN-ACK, ACK)
-- Data packets with PSH flag
-- Connection termination (FIN, ACK)
-
-### Syscall Tracing
-
-#### Client-side Syscall Analysis
+## Observability and logs
 
 ```bash
-# Enter the client container
-docker compose exec client sh
-
-# Inside the container, trace client syscalls
-strace -e trace=open,read,write,close,socket,connect,listen,epoll_create1,epoll_ctl,epoll_pwait -f -t -o ./logs/syscall.log node index.js
-
-# View the syscall log
-cat syscall.log
-```
-
-#### Server-side Syscall Analysis
-
-The server automatically runs with strace enabled. View server syscalls:
-
-```bash
-# Enter the server container
-docker compose exec server sh
-
-# Inside the container, view server syscall log
-cat syscall.log
-```
-
-**Key syscalls to observe:**
-
-- `socket()`: Socket creation
-- `bind`: Bind with port
-- `listen`: Listen on server
-- `connect()`: Client connection establishment
-- `accept4()`: Server accepting connections
-- `epoll_create1()`, `epoll_ctl()`, `epoll_pwait()`: Event polling for I/O multiplexing
-- `read()`, `write()`: Data transfer
-- `close()`: Connection cleanup
-
-## Advanced Usage
-
-### Multiple Connections Analysis
-
-```bash
-# Enter the client container
-docker compose exec client sh
-
-# Inside the container, run 10 concurrent connections in background
-CONNECTIONS=10 node index.js &
-
-# Monitor network packets
-tcpdump -i eth0 port 3000 -n
-```
-
-### Custom Environment
-
-```bash
-# Use custom port and multiple connections
-PORT=8080 CONNECTIONS=3 docker compose up -d
-
-# Enter the client container
-docker compose exec client sh
-
-# Inside the container, run with custom settings
-HOST=server PORT=8080 CONNECTIONS=3 node index.js
-```
-
-### Continuous Monitoring
-
-```bash
-# Monitor server logs in real-time
-docker compose logs -f server
-
-# Monitor client logs in real-time
+docker compose logs -f node-server
+docker compose logs -f go-server
 docker compose logs -f client
 ```
-
-## Analysis Tips
-
-1. **TCP State Analysis**: Use `netstat -ant` inside containers to see connection states
-2. **Performance Impact**: Compare syscall traces between single vs multiple connections
-3. **Buffer Analysis**: Observe how Node.js buffers affect `read()`/`write()` patterns
-4. **Event Loop**: Notice `epoll_*` syscalls showing Node.js event-driven I/O
-5. **Resource Cleanup**: Track file descriptor lifecycle through `socket()` and `close()`
-6. **Container Access**: Use `docker compose exec <service> sh` to enter containers and run commands directly
 
 ## Cleanup
 
 ```bash
-# Stop and remove containers
 docker compose down
-
-# Remove containers and volumes
+# or also remove volumes
 docker compose down -v
 ```
+
+## Troubleshooting
+
+- Ports already in use: pick different `NODE_PORT`/`GO_PORT` before `docker compose up`
+- Node server appears unresponsive: if `poison` was sent, it stops accepting new connections; restart that service
+- Check connections/state inside containers: `netstat -ant` or `ss -ant`
