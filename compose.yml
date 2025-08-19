@@ -1,0 +1,28 @@
+services:
+  node-server:
+    build: ./node-server
+    ports:
+      - "${NODE_PORT:-3000}:3000"
+    container_name: node-server
+    volumes:
+      - ./node-server/logs:/app/logs
+
+  go-server:
+    build: ./go-server
+    ports:
+      - "${GO_PORT:-3001}:3000"
+    container_name: go-server
+    volumes:
+      - ./go-server/logs:/app/logs
+
+  client:
+    build: ./client
+    container_name: client
+    depends_on:
+      - node-server
+      - go-server
+    environment:
+      - HOST=${TCP_HOST:-node-server}
+      - PORT=3000
+    volumes:
+      - ./client/logs:/app/logs
