@@ -4,7 +4,7 @@ const messages = process.argv.slice(2);
 const totalConnections = process.env.CONNECTIONS ?? 1;
 const intervalTimer = process.env.INTERVAL ?? 500;
 const timeout = process.env.TIMEOUT ?? 10000;
-const HOST = process.env.HOST ?? 'localhost';
+const HOST = process.env.HOST ?? 'node-server';
 const PORT = process.env.PORT ?? 3000;
 
 const createAndConnect = (id) => {

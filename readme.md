@@ -29,10 +29,6 @@ A Docker-based TCP lab for exploring network I/O internals, syscalls, and packet
 
 Syscall traces for both servers are written inside the containers to `/app/logs/syscall.log` and are bind-mounted to the host at `node-server/logs/syscall.log` and `go-server/logs/syscall.log`.
 
-## Prerequisites
-
-- Docker and Docker Compose v2
-
 ## Environment variables
 
 - **Client**

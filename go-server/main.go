@@ -62,7 +62,6 @@ func main() {
 	for {
 		if conn, err := socket.Accept(); err != nil {
 			fmt.Println(err)
-			break
 		} else {
 			fmt.Println("Accepting connection", conn.RemoteAddr())
 			go handleConnection(conn)
