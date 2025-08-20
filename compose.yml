@@ -6,6 +6,8 @@ services:
     container_name: node-server
     volumes:
       - ./node-server/logs:/app/logs
+    env_file:
+      - .env
 
   go-server:
     build: ./go-server
@@ -14,6 +16,8 @@ services:
     container_name: go-server
     volumes:
       - ./go-server/logs:/app/logs
+    env_file:
+      - .env
 
   client:
     build: ./client
@@ -21,8 +25,7 @@ services:
     depends_on:
       - node-server
       - go-server
-    environment:
-      - HOST=${TCP_HOST:-node-server}
-      - PORT=3000
     volumes:
       - ./client/logs:/app/logs
+    env_file:
+      - .env

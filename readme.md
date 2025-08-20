@@ -7,6 +7,7 @@ A Docker-based TCP lab for exploring network I/O internals, syscalls, and packet
 ```text
 .
 ├─ compose.yml              # Docker Compose with 3 services
+├─ .env.example             # Environment variables template
 ├─ client/                  # TCP client + tcpdump/strace tools
 │  ├─ index.js
 │  ├─ Dockerfile
@@ -31,10 +32,18 @@ Syscall traces for both servers are written inside the containers to `/app/logs/
 
 ## Environment variables
 
+Copy the example environment file and customize as needed:
+
+```bash
+cp .env.example .env
+```
+
+The `.env` file is used by Docker Compose to set environment variables for all services.
+
 - **Client**
 
   - `CONNECTIONS` (default: 1): number of concurrent connections
-  - `HOST` (default: `localhost`; compose sets it to `node-server`): server hostname/IP
+  - `HOST` (default: `localhost`; compose sets it to `go-server`): server hostname/IP
   - `PORT` (default: 3000): server port
   - `INTERVAL` (default: 500 ms): message send interval
   - `TIMEOUT` (default: 10000 ms): how long to keep each connection open
@@ -46,11 +55,24 @@ Syscall traces for both servers are written inside the containers to `/app/logs/
   - `BLOCK_EVENT_LOOP_INTERVAL` (optional, ms): simulate CPU-bound event-loop blocking in a recurring loop
 
 - **Go server**
+  - `DELAY_READ` (optional, seconds): adds delay to read operations for testing
+  - `DELAY_WRITE` (optional, seconds): adds delay to write operations for testing
   - Listens on container port 3000 (no env toggles in code); host port is `${GO_PORT:-3001}` via compose
+
+- **Docker Compose variables** (set in `.env` file)
+  - `NODE_PORT` (default: 3000): host port for Node.js server
+  - `GO_PORT` (default: 3001): host port for Go server
 
 ## Quick start
 
-Start everything
+Set up environment variables (optional):
+
+```bash
+cp .env.example .env
+# Edit .env to customize ports and other settings
+```
+
+Start everything:
 
 ```bash
 docker compose up -d

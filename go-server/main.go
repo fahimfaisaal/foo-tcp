@@ -5,7 +5,10 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"os"
+	"strconv"
 	"strings"
+	"time"
 )
 
 var messageMap = map[string]string{
@@ -17,11 +20,30 @@ var messageMap = map[string]string{
 	"help":  "Available commands: hi, hello, ping, foo, exit, help",
 }
 
+var delayRead, delayWrite = parseEnvToInt("DELAY_READ"), parseEnvToInt("DELAY_WRITE")
+
+func parseEnvToInt(envName string) int64 {
+	if delay := os.Getenv(envName); delay != "" {
+		if intDelay, err := strconv.ParseInt(delay, 10, 64); err == nil {
+			fmt.Printf("Error on parsing %s\n", envName)
+			return intDelay
+		}
+	}
+
+	return 0
+}
+
+func delay(ms int64) {
+	time.Sleep(time.Duration(ms) * time.Millisecond)
+}
+
 func handleConnection(conn net.Conn) {
 	defer conn.Close() // Ensure connection is closed when function returns
 	reader := bufio.NewReader(conn)
 
 	for {
+		delay(delayRead)
+
 		message, err := reader.ReadString('\n') // Read until newline
 		if err != nil {
 			if err == io.EOF {
@@ -38,6 +60,8 @@ func handleConnection(conn net.Conn) {
 
 		for _, word := range words {
 			if response, exists := messageMap[word]; exists {
+				delay(delayWrite)
+
 				fmt.Fprintf(conn, "server: %s\n", response)
 				if word == "exit" {
 					return // Close connection on exit
@@ -49,6 +73,9 @@ func handleConnection(conn net.Conn) {
 	}
 }
 
+func init() {
+
+}
 func main() {
 	socket, err := net.Listen("tcp", ":3000")
 	if err != nil {
