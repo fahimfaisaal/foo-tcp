@@ -114,23 +114,8 @@ Observe:
 Servers run under `strace` by default.
 
 ```bash
-# Node server
-docker compose exec node-server sh -c 'tail -n +1 -f ./logs/syscall.log'
-
-# Go server
-docker compose exec go-server sh -c 'tail -n +1 -f ./logs/syscall.log'
-
-# From the host you can also read the bind-mounted files directly
 tail -f node-server/logs/syscall.log
 tail -f go-server/logs/syscall.log
-```
-
-Client-side ad-hoc syscall tracing:
-
-```bash
-docker compose exec client sh
-strace -e trace=open,read,write,close,socket,connect,listen,accept4,epoll_create1,epoll_ctl,epoll_pwait \
-  -f -tt -T -o ./logs/syscall.log -- node index.js ping hello
 ```
 
 ## Observability and logs

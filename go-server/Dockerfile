@@ -20,4 +20,3 @@ COPY --from=builder /app/server ./server
 
 # Default command: run the server under strace and log syscalls
 CMD ["strace", "-e", "trace=open,read,write,close,socket,bind,listen,accept4,epoll_create1,epoll_ctl,epoll_pwait", "-f", "-tt", "-T", "-o", "./logs/syscall.log", "./server"]
-
